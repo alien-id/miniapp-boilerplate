@@ -1,35 +1,54 @@
-import { ConnectionStatus } from "@/features/auth/components/connection-status";
-import { UserInfo } from "@/features/user/components/user-info";
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useMyCard } from "@/features/cards/hooks/use-my-card";
+import { useAlien } from "@alien_org/react";
+import { CreateCardForm } from "@/features/cards/components/create-card-form";
 
 export default function Home() {
+  const router = useRouter();
+  const { authToken } = useAlien();
+  const { card, loading } = useMyCard();
+
+  useEffect(() => {
+    if (loading || !authToken) return;
+    if (card) {
+      router.replace(`/card/${card.id}`);
+    }
+  }, [card, loading, authToken, router]);
+
+  if (loading && authToken) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-12">
+        <p className="text-sm text-zinc-500">Loading…</p>
+      </div>
+    );
+  }
+
+  if (card) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-12">
+        <p className="text-sm text-zinc-500">Redirecting to your card…</p>
+      </div>
+    );
+  }
+
   return (
-    <>
+    <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-          Alien Miniapp
-        </h1>
-        <p className="mt-1 text-sm text-zinc-400 dark:text-zinc-500">
-          Your miniapp is running.
+        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Cosign</h1>
+        <p className="mt-1 text-sm text-zinc-500">
+          Your professional card with verified human reviews.
         </p>
       </div>
-
-      <ConnectionStatus />
-      <UserInfo />
-
-      <div className="overflow-hidden rounded-xl border border-zinc-200/60 bg-white dark:border-zinc-800/60 dark:bg-zinc-900">
-        <div className="p-5">
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
-            Stack
-          </h2>
-          <ul className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
-            <li>Next.js 16 &middot; App Router</li>
-            <li>TypeScript &middot; Strict mode</li>
-            <li>Tailwind CSS 4 &middot; Geist fonts</li>
-            <li>PostgreSQL &middot; Drizzle ORM</li>
-            <li>React Query &middot; Zod validation</li>
-          </ul>
-        </div>
-      </div>
-    </>
+      {authToken ? (
+        <CreateCardForm />
+      ) : (
+        <p className="text-sm text-zinc-600">
+          Open Cosign in the Alien app to create your card.
+        </p>
+      )}
+    </div>
   );
 }

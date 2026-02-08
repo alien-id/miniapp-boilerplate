@@ -16,10 +16,11 @@
   --spacing-safe-right: var(--alien-safe-area-inset-right, 0px);
 }
 
+/* Cosign: light theme only per design rules */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #ffffff;
+    --foreground: #171717;
   }
 }
 

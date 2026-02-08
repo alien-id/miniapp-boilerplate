@@ -5,6 +5,8 @@ const serverSchema = z.object({
   WEBHOOK_PUBLIC_KEY: z.string().min(1, "WEBHOOK_PUBLIC_KEY is required"),
   ALIEN_JWKS_URL: z.optional(z.url("ALIEN_JWKS_URL must be a valid URL")).default("https://sso.alien-api.com/oauth/jwks"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  BLOB_READ_WRITE_TOKEN: z.string().optional(), // Vercel Blob for avatar upload
+  APIFY_API_TOKEN: z.string().optional(), // Apify LinkedIn scrape (ALIEN_ESI_APIFYHACKER credits)
 });
 
 const clientSchema = z.object({

@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Alien Miniapp",
-  description: "Alien Miniapp Boilerplate",
+  title: "Cosign",
+  description: "Your professional card with verified human reviews",
 };
 
 export default function RootLayout({
