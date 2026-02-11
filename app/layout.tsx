@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
 import { TabBar } from "@/features/navigation/components/tab-bar";
+import { Eruda } from "@/features/debug/eruda";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,6 +35,7 @@ export default function RootLayout({
             {children}
           </main>
           <TabBar />
+          {process.env.NODE_ENV === "development" && <Eruda />}
         </Providers>
       </body>
     </html>
