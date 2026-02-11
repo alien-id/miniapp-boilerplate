@@ -35,7 +35,7 @@ export default function RootLayout({
             {children}
           </main>
           <TabBar />
-          <Eruda />
+          {process.env.NODE_ENV === "development" && <Eruda />}
         </Providers>
       </body>
     </html>

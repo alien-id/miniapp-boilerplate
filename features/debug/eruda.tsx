@@ -2,16 +2,18 @@
 
 import { useEffect } from "react";
 
-export const Eruda = () => {
+export function Eruda() {
   useEffect(() => {
-    if (process.env.NODE_ENV === "development") {
-      import("eruda").then((eruda) => {
-        if (!window.document.getElementById("eruda")) {
-          eruda.default.init();
-        }
-      });
-    }
+    let destroyed = false;
+    import("eruda").then((eruda) => {
+      if (destroyed) return;
+      eruda.default.init();
+    });
+    return () => {
+      destroyed = true;
+      import("eruda").then((eruda) => eruda.default.destroy());
+    };
   }, []);
 
   return null;
-};
+}
