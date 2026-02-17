@@ -29,7 +29,7 @@ export const WebhookPayload = z.object({
   recipient: z.string(),
   txHash: z.string().optional(),
   status: z.enum(["finalized", "failed"]),
-  amount: z.union([z.string(), z.number()]).transform(String).optional(),
+  amount: z.string(),
   token: z.string().optional(),
   network: z.string().optional(),
   test: z.boolean().optional(),
