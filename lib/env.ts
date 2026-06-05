@@ -2,7 +2,12 @@ import { z } from "zod";
 
 const serverSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  WEBHOOK_PUBLIC_KEY: z.string().min(1, "WEBHOOK_PUBLIC_KEY is required"),
+  WEBHOOK_PUBLIC_KEY: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, "WEBHOOK_PUBLIC_KEY must be a 32-byte hex-encoded Ed25519 public key"),
+  // Expected `aud` claim of incoming JWTs. This is your miniapp's provider
+  // address from the Dev Portal.
+  ALIEN_AUDIENCE: z.string().min(1, "ALIEN_AUDIENCE is required"),
   ALIEN_JWKS_URL: z.optional(z.url("ALIEN_JWKS_URL must be a valid URL")).default("https://sso.alien-api.com/oauth/jwks"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });

@@ -11,40 +11,24 @@ You are a backend specialist for the Alien miniapp boilerplate. You build API ro
 
 ## Auth Pattern
 
-Every protected API route follows this exact pattern:
+Every protected API route uses the `withAuth` wrapper from `@/lib/api/with-auth`:
 
 ```typescript
 import { NextResponse } from "next/server";
-import { verifyToken, extractBearerToken } from "@/features/auth/lib";
-import { JwtErrors } from "@alien_org/auth-client";
+import { withAuth } from "@/lib/api/with-auth";
 
-export async function GET(request: Request) {
-  try {
-    const token = extractBearerToken(request.headers.get("Authorization"));
-    if (!token) {
-      return NextResponse.json({ error: "Missing authorization token" }, { status: 401 });
-    }
-    const { sub } = await verifyToken(token);
-    // sub = user's Alien ID (wallet address)
-    // ... business logic
-  } catch (error) {
-    if (error instanceof JwtErrors.JWTExpired) {
-      return NextResponse.json({ error: "Token expired" }, { status: 401 });
-    }
-    if (error instanceof JwtErrors.JOSEError) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
-}
+export const GET = withAuth(async (request, { auth }) => {
+  // auth.sub = user's Alien ID (wallet address)
+  // ... business logic
+  return NextResponse.json({ ... });
+});
 ```
 
 Key details:
 
-- `extractBearerToken` returns `string | null` — always check for null
-- `verifyToken` returns `TokenInfo` with `sub` (user's Alien ID / wallet address)
-- Catch `JwtErrors.JWTExpired` and `JwtErrors.JOSEError` specifically
-- Response format: `{ data }` on success, `{ error: "message" }` on failure
+- `withAuth` handles Bearer extraction, JWKS verification, and JWT error mapping (missing/expired/invalid token → 401, unexpected errors → 500) — never reimplement this per route
+- The handler receives verified `TokenInfo` as `auth`; `auth.sub` is the user's Alien ID
+- Response format: payload object on success, `{ error: "message" }` on failure
 
 ## Webhook Handler Pattern
 
@@ -54,9 +38,9 @@ Webhook routes have a specific security-critical order of operations:
 2. Get signature: `request.headers.get("x-webhook-signature")`
 3. Reject if signature is missing
 4. Verify Ed25519 signature BEFORE parsing JSON
-5. ONLY NOW parse and validate with Zod `.safeParse()`
-6. Check idempotency (skip if already completed/failed)
-7. Atomic database update with `db.transaction()`
+5. ONLY NOW parse and validate with Zod `.safeParse()` (and guard `JSON.parse` — malformed JSON is a 400, not a 500)
+6. Cross-check the payload against the stored payment intent (recipient, amount, token, network)
+7. Settle atomically in `db.transaction()` with a status transition conditional on `pending` — this makes concurrent re-deliveries race-safe and idempotent
 
 Ed25519 verification uses Web Crypto API:
 
@@ -109,22 +93,18 @@ Co-locate schema and inferred type in `dto.ts` files:
 ```typescript
 import { z } from "zod";
 
-export const CreateInvoiceBody = z.object({
-  recipientAddress: z.string(),
-  amount: z.string(),
-  token: z.string(),
-  network: z.string(),
-  productId: z.string(),
+export const CreateInvoiceRequest = z.object({
+  productId: z.string().min(1),
 });
-export type CreateInvoiceBody = z.infer<typeof CreateInvoiceBody>;
+export type CreateInvoiceRequest = z.infer<typeof CreateInvoiceRequest>;
 ```
 
-Validate in API routes with `.safeParse()`.
+Validate in API routes with `.safeParse()`. Clients only name the product — amounts, tokens, and recipients are always resolved server-side from the catalog.
 
 ## Environment Variables
 
 - Use `getServerEnv()` from `@/lib/env` to access validated server env vars
-- Available: `DATABASE_URL`, `WEBHOOK_PUBLIC_KEY`, `ALIEN_JWKS_URL`, `NODE_ENV`
+- Available: `DATABASE_URL`, `WEBHOOK_PUBLIC_KEY`, `ALIEN_AUDIENCE`, `ALIEN_JWKS_URL`, `NODE_ENV`
 - When adding new server env vars, update the Zod schema in `lib/env.ts`
 - Never access `process.env` directly
 
@@ -132,6 +112,7 @@ Validate in API routes with `.safeParse()`.
 
 Study these files for patterns before building:
 
+- `lib/api/with-auth.ts` — the `withAuth` route wrapper (use it for every protected route)
 - `features/auth/lib.ts` — auth client setup, `verifyToken`, `extractBearerToken`
 - `app/api/webhooks/payment/route.ts` — webhook handler with Ed25519 verification
 - `features/payments/queries.ts` — Drizzle query patterns (CRUD for intents & transactions)

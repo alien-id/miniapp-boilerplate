@@ -1,8 +1,15 @@
-type PaymentTestScenario =
-  | "paid"
-  | "paid:failed"
-  | "cancelled"
-  | `error:${"insufficient_balance" | "network_error" | "pre_checkout_rejected" | "pre_checkout_timeout" | "unknown"}`;
+import type { PaymentTestScenario } from "@alien-id/miniapps-contract";
+import { getClientEnv } from "@/lib/env";
+
+/** All test scenarios defined by the SDK contract, as a runtime list for Zod enums. */
+export const PAYMENT_TEST_SCENARIOS = [
+  "paid",
+  "paid:failed",
+  "cancelled",
+  "error:insufficient_balance",
+  "error:network_error",
+  "error:unknown",
+] as const satisfies readonly PaymentTestScenario[];
 
 export type DiamondProduct = {
   id: string;
@@ -20,8 +27,11 @@ export type DiamondProduct = {
 
 const ICON_URL = "https://avatars.githubusercontent.com/u/40111175?s=40&v=4";
 
-const SOLANA_RECIPIENT = process.env.NEXT_PUBLIC_RECIPIENT_ADDRESS!;
-const ALIEN_RECIPIENT = process.env.NEXT_PUBLIC_ALIEN_RECIPIENT_ADDRESS!;
+// Validated access — fails fast with a clear message if either address is missing.
+const {
+  NEXT_PUBLIC_RECIPIENT_ADDRESS: SOLANA_RECIPIENT,
+  NEXT_PUBLIC_ALIEN_RECIPIENT_ADDRESS: ALIEN_RECIPIENT,
+} = getClientEnv();
 
 export const DIAMOND_PRODUCTS: DiamondProduct[] = [
   {

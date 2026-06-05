@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
-import { useAlien, usePayment } from "@alien_org/react";
-import type { CreateInvoiceResponse } from "../dto";
+import { useAlien, usePayment } from "@alien-id/miniapps-react";
+import { fetchApi } from "@/lib/api/client";
+import { CreateInvoiceResponse } from "../dto";
 
 type UseDiamondPurchaseOptions = {
   onPaid?: () => void;
@@ -27,23 +28,14 @@ export function useDiamondPurchase({
     async (productId: string) => {
       if (!authToken) return;
 
-      const res = await fetch("/api/invoices", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({ productId }),
-      });
+      const data = CreateInvoiceResponse.parse(
+        await fetchApi("/api/invoices", authToken, {
+          method: "POST",
+          body: JSON.stringify({ productId }),
+        }),
+      );
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? "Failed to create invoice");
-      }
-
-      const data: CreateInvoiceResponse = await res.json();
-
-      payment.pay({
+      await payment.pay({
         recipient: data.recipient,
         amount: data.amount,
         token: data.token,
@@ -67,6 +59,6 @@ export function useDiamondPurchase({
     error: payment.error,
     errorCode: payment.errorCode,
     reset: payment.reset,
-    supported: payment.supported,
+    callable: payment.callable,
   };
 }

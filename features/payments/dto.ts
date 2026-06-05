@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { PaymentTestScenario } from "@alien_org/contract";
+import { PAYMENT_TEST_SCENARIOS } from "./constants";
 
 export const CreateInvoiceRequest = z.object({
   productId: z.string().min(1),
@@ -19,20 +19,24 @@ export const CreateInvoiceResponse = z.object({
     iconUrl: z.string(),
     quantity: z.number(),
   }),
-  test: z.string().optional().transform((val) => val as PaymentTestScenario | undefined),
+  test: z.enum(PAYMENT_TEST_SCENARIOS).optional(),
 });
 
 export type CreateInvoiceResponse = z.infer<typeof CreateInvoiceResponse>;
 
+/**
+ * Payment webhook payload, Ed25519-signed by the Alien platform. For test
+ * payments, `test` carries the originating test scenario string.
+ */
 export const WebhookPayload = z.object({
   invoice: z.string(),
   recipient: z.string(),
-  txHash: z.string().optional(),
   status: z.enum(["finalized", "failed"]),
-  amount: z.string(),
+  txHash: z.string().optional(),
+  amount: z.string().optional(),
   token: z.string().optional(),
   network: z.string().optional(),
-  test: z.boolean().optional(),
+  test: z.enum(PAYMENT_TEST_SCENARIOS).optional(),
 });
 
 export type WebhookPayload = z.infer<typeof WebhookPayload>;
@@ -49,3 +53,9 @@ export const TransactionDTO = z.object({
 });
 
 export type TransactionDTO = z.infer<typeof TransactionDTO>;
+
+export const TransactionsResponse = z.object({
+  transactions: z.array(TransactionDTO),
+});
+
+export type TransactionsResponse = z.infer<typeof TransactionsResponse>;

@@ -1,27 +1,19 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { useAlien } from "@alien_org/react";
+import { useAlien, useCallable, useHaptic } from "@alien-id/miniapps-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
+import { fetchApi } from "@/lib/api/client";
 import {
   DIAMOND_PRODUCTS,
   TEST_DIAMOND_PRODUCTS,
   type DiamondProduct,
 } from "../constants";
 import { useDiamondPurchase } from "../hooks/use-diamond-purchase";
-import { TransactionDTO } from "../dto";
+import { TransactionsResponse, type TransactionDTO } from "../dto";
 
 type Tab = "real" | "test";
-
-async function fetchTransactions(authToken: string): Promise<TransactionDTO[]> {
-  const res = await fetch("/api/transactions", {
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
-  if (!res.ok) throw new Error("Failed to fetch transactions");
-  const data = await res.json();
-  return data.transactions;
-}
 
 const TOKEN_DECIMALS: Record<string, number> = {
   USDC: 6,
@@ -138,11 +130,10 @@ function ProductCard({
 }
 
 function TransactionItem({ tx }: { tx: TransactionDTO }) {
+  // Transactions are only recorded from settled webhooks: "paid" or "failed".
   const statusStyles: Record<string, string> = {
     paid: "text-emerald-600 dark:text-emerald-400",
-    finalized: "text-emerald-600 dark:text-emerald-400",
     failed: "text-red-500 dark:text-red-400",
-    cancelled: "text-zinc-400 dark:text-zinc-500",
   };
 
   const amount =
@@ -177,8 +168,28 @@ function TransactionItem({ tx }: { tx: TransactionDTO }) {
   );
 }
 
+function PaymentUnavailableBanner() {
+  // Typed callability tells us *why* payments are unavailable: outside the
+  // Alien app entirely, or inside a host that predates payment:request.
+  const callability = useCallable("payment:request");
+
+  if (callability.callable) return null;
+
+  return (
+    <div className="rounded-xl border border-amber-200/60 bg-amber-50 p-4 dark:border-amber-800/40 dark:bg-amber-950/20">
+      <p className="text-sm text-amber-700 dark:text-amber-400">
+        {callability.reason === "no-bridge"
+          ? "Open this app inside the Alien app to enable payments."
+          : `Payments need Alien contract v${callability.needs}, but this host has v${callability.has}. Please update the Alien app.`}
+      </p>
+    </div>
+  );
+}
+
 export function DiamondStore() {
-  const { authToken, isBridgeAvailable } = useAlien();
+  const { authToken } = useAlien();
+  const paymentCallability = useCallable("payment:request");
+  const { notificationOccurred, selectionChanged, impactOccurred } = useHaptic();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>("real");
   const activeProductRef = useRef<DiamondProduct | null>(null);
@@ -188,39 +199,44 @@ export function DiamondStore() {
     isLoading: loadingTxs,
     refetch: refetchTransactions,
   } = useQuery({
-    queryKey: ["transactions"],
-    queryFn: () => fetchTransactions(authToken!),
+    queryKey: ["transactions", authToken],
+    queryFn: async () =>
+      TransactionsResponse.parse(await fetchApi("/api/transactions", authToken!))
+        .transactions,
     enabled: !!authToken,
   });
 
   const handlePaid = useCallback(() => {
     const product = activeProductRef.current;
+    notificationOccurred("success");
     if (product) {
       toast.success(
         `Bought ${product.diamonds} diamonds for ${product.price}`,
       );
     }
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
-  }, [queryClient]);
+  }, [queryClient, notificationOccurred]);
 
   const handleCancelled = useCallback(() => {
     const product = activeProductRef.current;
+    notificationOccurred("warning");
     toast(
       product
         ? `Purchase of ${product.diamonds} diamonds cancelled`
         : "Payment cancelled",
-      { icon: "\u2715" },
+      { icon: "✕" },
     );
-  }, []);
+  }, [notificationOccurred]);
 
   const handleFailed = useCallback(() => {
     const product = activeProductRef.current;
+    notificationOccurred("error");
     toast.error(
       product
         ? `Failed to buy ${product.diamonds} diamonds for ${product.price}`
         : "Payment failed. Please try again.",
     );
-  }, []);
+  }, [notificationOccurred]);
 
   const {
     purchase,
@@ -234,6 +250,7 @@ export function DiamondStore() {
 
   const handleBuy = async (product: DiamondProduct) => {
     activeProductRef.current = product;
+    impactOccurred("medium");
     try {
       await purchase(product.id);
     } catch (err) {
@@ -244,13 +261,14 @@ export function DiamondStore() {
   };
 
   const handleTabChange = (tab: Tab) => {
+    selectionChanged();
     setActiveTab(tab);
     reset();
   };
 
   const products =
     activeTab === "test" ? TEST_DIAMOND_PRODUCTS : DIAMOND_PRODUCTS;
-  const canBuy = !!authToken && isBridgeAvailable && !isLoading;
+  const canBuy = !!authToken && paymentCallability.callable && !isLoading;
 
   return (
     <div className="flex flex-col gap-6">
@@ -263,13 +281,7 @@ export function DiamondStore() {
         </p>
       </div>
 
-      {!isBridgeAvailable && (
-        <div className="rounded-xl border border-amber-200/60 bg-amber-50 p-4 dark:border-amber-800/40 dark:bg-amber-950/20">
-          <p className="text-sm text-amber-700 dark:text-amber-400">
-            Open this app inside the Alien app to enable payments.
-          </p>
-        </div>
-      )}
+      <PaymentUnavailableBanner />
 
       <TabSwitch active={activeTab} onChange={handleTabChange} />
 
