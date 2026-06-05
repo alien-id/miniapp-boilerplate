@@ -22,7 +22,10 @@ cp .env.example .env
 | Variable | Description |
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string |
-| `WEBHOOK_PUBLIC_KEY` | Ed25519 public key (hex) for verifying payment webhook signatures |
+| `WEBHOOK_PUBLIC_KEY` | Ed25519 public key (hex, 64 chars) for verifying payment webhook signatures |
+| `ALIEN_AUDIENCE` | Expected JWT `aud` claim. This is your provider address from the Dev Portal |
+| `ALIEN_JWKS_URL` | JWKS endpoint for JWT verification. Optional, defaults to `https://sso.alien-api.com/oauth/jwks` |
+| `RUN_MIGRATIONS` | Set to `true` to run DB migrations automatically on server start. Optional, off by default |
 | `NEXT_PUBLIC_RECIPIENT_ADDRESS` | Solana wallet address that receives USDC/SOL payments |
 | `NEXT_PUBLIC_ALIEN_RECIPIENT_ADDRESS` | Alien provider address that receives ALIEN token payments |
 
@@ -31,6 +34,7 @@ cp .env.example .env
 - **`NEXT_PUBLIC_RECIPIENT_ADDRESS`** — any Solana wallet address you want to receive payments to (e.g. your personal wallet, or even the wallet address shown in your Alien app).
 - **`NEXT_PUBLIC_ALIEN_RECIPIENT_ADDRESS`** — your **provider address** from the Alien Dev Portal. You can find it on the [Webhooks](https://dev.alien.org/dashboard/webhooks) or [Mini Apps](https://dev.develop.alien.org/dashboard/miniapps) pages. For ALIEN token payments, your provider address is used automatically.
 - **`WEBHOOK_PUBLIC_KEY`** — the Ed25519 public key provided by the Alien Dev Portal when you register a webhook.
+- **`ALIEN_AUDIENCE`** — the expected `aud` claim of incoming auth tokens; this is your **provider address** from the Dev Portal (same place as above).
 
 ## Setting Up Payments
 
@@ -102,33 +106,45 @@ app/
 │   ├── transactions/route.ts          # Fetch transaction history
 │   └── webhooks/payment/route.ts      # Payment webhook handler
 ├── store/page.tsx                     # Store page (diamond shop)
+├── explore/page.tsx                   # SDK showcase (haptics, clipboard, capabilities, ...)
 ├── layout.tsx                         # Root layout with AlienProvider
 ├── page.tsx                           # Home page
 ├── providers.tsx                      # Client-side providers
 ├── error.tsx                          # Error boundary
 └── global-error.tsx                   # Global error boundary
+components/
+└── ui/card.tsx                        # Shared card primitives
 features/
 ├── auth/
 │   ├── components/
-│   │   └── connection-status.tsx      # Bridge & token status indicator
+│   │   └── connection-status.tsx      # Bridge, token & contract version status
 │   └── lib.ts                         # Token verification (JWKS)
+├── navigation/
+│   └── components/
+│       ├── tab-bar.tsx                # Bottom tab navigation
+│       └── native-back-button.tsx     # Host back button wiring (useBackButton)
+├── sdk-showcase/
+│   └── components/                    # Live demos: launch params, callability,
+│                                      # haptics, clipboard, host actions
 ├── user/
 │   ├── components/
-│   │   └── user-info.tsx              # User info display
+│   │   └── user-info.tsx              # User info display (copyable Alien ID)
 │   ├── dto.ts                         # Zod schemas for user data
 │   ├── hooks/
 │   │   └── use-current-user.ts        # Hook to fetch current user
-│   └── queries.ts                     # Database queries (find/create user)
+│   └── queries.ts                     # Database queries (upsert user)
 └── payments/
     ├── components/
-    │   ├── diamond-store.tsx           # Store UI with product grid
-    │   └── transaction-history.tsx     # Transaction list
+    │   └── diamond-store.tsx           # Store UI with product grid & history
     ├── hooks/
     │   └── use-diamond-purchase.ts     # Purchase hook (invoice + pay)
     ├── constants.ts                    # Products, tokens, test scenarios
     ├── dto.ts                          # Zod schemas for payments
     └── queries.ts                      # Database queries for payments
 lib/
+├── api/
+│   ├── with-auth.ts                   # Bearer-auth route wrapper (server)
+│   └── client.ts                      # Authorized JSON fetcher (client)
 ├── db/
 │   ├── index.ts                       # Database connection & migrations
 │   └── schema.ts                      # Drizzle schema (users, payment_intents, transactions)
@@ -140,9 +156,9 @@ lib/
 Authentication is handled automatically by the Alien platform:
 
 1. Alien app injects an auth token when loading your miniapp
-2. `useAlien()` hook from `@alien_org/react` provides the token on the client
+2. `useAlien()` hook from `@alien-id/miniapps-react` provides the token on the client
 3. Frontend sends the token as `Authorization: Bearer <token>` to your API routes
-4. API verifies the token against Alien's JWKS using `@alien_org/auth-client`
+4. API verifies the token against Alien's JWKS using `@alien-id/miniapps-auth-client`
 5. The `sub` claim from the JWT is the user's unique Alien ID
 
 **Registration is implicit** — on first API call, the user is automatically created in the database via a find-or-create pattern. No signup flow needed.
@@ -189,7 +205,7 @@ PostgreSQL with Drizzle ORM. Local setup uses Docker (`docker-compose.yml`).
 | `token` | TEXT | Token type |
 | `network` | TEXT | Network |
 | `invoice` | TEXT | Associated invoice |
-| `test` | TEXT | `"true"` if test transaction |
+| `test` | TEXT | Originating test scenario (e.g. `paid`, `paid:failed`); `NULL` for real payments |
 | `payload` | JSONB | Full webhook payload for audit |
 
 **Commands:**
@@ -226,19 +242,24 @@ Creates a payment intent. Requires Bearer token.
 
 ```json
 {
-  "recipientAddress": "wallet-or-provider-address",
-  "amount": "10000",
-  "token": "USDC",
-  "network": "solana",
   "productId": "usdc-diamonds-10"
 }
 ```
+
+Amounts, tokens, and recipient addresses are always resolved server-side
+from the product catalog — the client only names the product.
 
 **Response:**
 
 ```json
 {
-  "invoice": "inv-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  "invoice": "inv-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "id": "uuid",
+  "recipient": "wallet-or-provider-address",
+  "amount": "10000",
+  "token": "USDC",
+  "network": "solana",
+  "item": { "title": "Small Pouch", "iconUrl": "https://...", "quantity": 10 }
 }
 ```
 
@@ -248,7 +269,7 @@ Returns the authenticated user's transaction history. Requires Bearer token.
 
 ### `POST /api/webhooks/payment`
 
-Receives payment status updates from the Alien platform. Verifies the `x-webhook-signature` header (Ed25519) against `WEBHOOK_PUBLIC_KEY`.
+Receives payment status updates from the Alien platform. Verifies the `x-webhook-signature` header (Ed25519) against `WEBHOOK_PUBLIC_KEY`, cross-checks the payload against the stored payment intent (recipient, amount, token, network), and processes idempotently — re-delivered webhooks for settled intents respond with `{ "success": true, "processed": false }` without reprocessing.
 
 ## Deployment
 
@@ -257,7 +278,7 @@ This app is designed to run on **Vercel**. Setup takes just a few clicks:
 1. Push your code to GitHub
 2. Import the repository on [vercel.com](https://vercel.com)
 3. Add a PostgreSQL database (Vercel Postgres, Neon, Supabase, or any external provider)
-4. Set the environment variables: `DATABASE_URL`, `WEBHOOK_PUBLIC_KEY`, `NEXT_PUBLIC_RECIPIENT_ADDRESS`, `NEXT_PUBLIC_ALIEN_RECIPIENT_ADDRESS`
+4. Set the environment variables: `DATABASE_URL`, `WEBHOOK_PUBLIC_KEY`, `ALIEN_AUDIENCE`, `NEXT_PUBLIC_RECIPIENT_ADDRESS`, `NEXT_PUBLIC_ALIEN_RECIPIENT_ADDRESS`
 5. Deploy
 
 Vercel auto-detects Next.js and handles the build. For auto-migrations on deploy, set `RUN_MIGRATIONS=true`.
