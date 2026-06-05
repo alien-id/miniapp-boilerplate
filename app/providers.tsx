@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { AlienProvider } from "@alien_org/react";
+import { AlienProvider } from "@alien-id/miniapps-react";
 import { Toaster } from "react-hot-toast";
 
 export function Providers({ children }: { children: React.ReactNode }) {

@@ -1,28 +1,17 @@
 "use client";
 
-import { useAlien } from "@alien_org/react";
+import { useAlien } from "@alien-id/miniapps-react";
 import { useQuery } from "@tanstack/react-query";
+import { fetchApi } from "@/lib/api/client";
 import { UserDTO } from "../dto";
-
-async function fetchCurrentUser(authToken: string): Promise<UserDTO> {
-  const res = await fetch("/api/me", {
-    headers: { Authorization: `Bearer ${authToken}` },
-  });
-
-  if (!res.ok) {
-    const body = await res.json();
-    throw new Error(body.error ?? "Request failed");
-  }
-
-  return UserDTO.parse(await res.json());
-}
 
 export function useCurrentUser() {
   const { authToken } = useAlien();
 
   const { data: user, isLoading: loading, error } = useQuery({
-    queryKey: ["currentUser"],
-    queryFn: () => fetchCurrentUser(authToken!),
+    // Keyed by token so a token change never serves another identity's cache.
+    queryKey: ["currentUser", authToken],
+    queryFn: async () => UserDTO.parse(await fetchApi("/api/me", authToken!)),
     enabled: !!authToken,
   });
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { useAlien } from "@alien_org/react";
+import { useAlien } from "@alien-id/miniapps-react";
 
 export function ConnectionStatus() {
-  const { authToken, isBridgeAvailable } = useAlien();
+  const { authToken, isBridgeAvailable, contractVersion } = useAlien();
 
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200/60 bg-white dark:border-zinc-800/60 dark:bg-zinc-900">
@@ -21,6 +21,11 @@ export function ConnectionStatus() {
             label="Auth Token"
             value={authToken ? "Present" : "Missing"}
             ok={!!authToken}
+          />
+          <Row
+            label="Contract"
+            value={contractVersion ?? "Unknown"}
+            ok={!!contractVersion}
           />
         </div>
       </div>
