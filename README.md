@@ -38,7 +38,7 @@ cp .env.example .env
 
 ## Setting Up Payments
 
-Register a webhook in the [Alien Dev Portal](https://dev.alien.org/dashboard/webhooks) pointing to:
+Register a webhook in the [Alien Dev Portal](https://dev.alien.org/dashboard) pointing to:
 
 ```
 https://<your-website>/api/webhooks/payment
@@ -266,4 +266,4 @@ This app is designed to run on **Vercel**. Setup takes just a few clicks:
 
 Vercel auto-detects Next.js and handles the build. For auto-migrations on deploy, set `RUN_MIGRATIONS=true`.
 
-Once deployed, register your webhook in the [Alien Dev Portal](https://dev.alien.org/dashboard/webhooks) pointing to `https://<your-vercel-domain>/api/webhooks/payment`.
+Once deployed, register your webhook in the [Alien Dev Portal](https://dev.alien.org/dashboard) pointing to `https://<your-vercel-domain>/api/webhooks/payment`.
