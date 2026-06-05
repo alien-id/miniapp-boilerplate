@@ -1,0 +1,2 @@
+CREATE INDEX "payment_intents_sender_alien_id_idx" ON "payment_intents" USING btree ("sender_alien_id");--> statement-breakpoint
+CREATE INDEX "transactions_sender_alien_id_created_at_idx" ON "transactions" USING btree ("sender_alien_id","created_at");
