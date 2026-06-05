@@ -51,7 +51,7 @@ Key shared modules:
 - Wrap the app in `AlienProvider` (done in `app/providers.tsx`); it sends `app:ready`, exposes `authToken` / `contractVersion`, sets safe-area CSS vars, and intercepts external links.
 - Gate host features with `callable` / `useCallable(method)` — never assume a method is available. Outside the Alien app the bridge is unavailable and hooks return `callable: false`.
 - Auth: client sends `authToken` as `Authorization: Bearer`; server verifies via `@alien-id/miniapps-auth-client` (`audience` comes from the `ALIEN_AUDIENCE` env — your provider address). The JWT `sub` claim is the user's Alien ID.
-- Payments: create the invoice server-side (`POST /api/invoices`, amounts resolved from the catalog only), call `pay()` from `usePayment`, fulfill on the webhook — never on the client result. Webhooks are unversioned, Ed25519-signed (`x-webhook-signature`).
+- Payments: create the invoice server-side (`POST /api/invoices`, amounts resolved from the catalog only), call `pay()` from `usePayment`, fulfill on the webhook — never on the client result. The webhook contract (v3 schema, Ed25519 signature, versioning, normalized `token` slug) is specified at https://docs.alien.org/react-sdk/payments — the handler implements it, the docs define it.
 - Full hook/method reference and payload schemas: https://docs.alien.org/ — don't duplicate them here. A live demo of SDK features lives in `features/sdk-showcase/` (Explore page).
 
 ## Agent Teams

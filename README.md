@@ -38,21 +38,15 @@ cp .env.example .env
 
 ## Setting Up Payments
 
-Before making any payments, you need to register a webhook in the [Alien Dev Portal](https://dev.alien.org/dashboard/webhooks):
+Register a webhook in the [Alien Dev Portal](https://dev.alien.org/dashboard/webhooks) pointing to:
 
-1. Go to the [**Webhooks**](https://dev.alien.org/dashboard/webhooks) page in the Dev Portal
-2. Click **Create webhook**
-3. Select your **Mini App** from the dropdown
-4. Set the **Webhook URL** to:
-   ```
-   https://<your-website>/api/webhooks/payment
-   ```
-5. Optionally add your **Solana pubkey** if you want to receive SOL/USDC
-6. Click **Create**
+```
+https://<your-website>/api/webhooks/payment
+```
 
-After creation, you will be briefly shown your **webhook public key** (Ed25519, hex-encoded). Copy it immediately — this is your `WEBHOOK_PUBLIC_KEY` env var. The boilerplate uses this key to verify that incoming webhooks are genuinely from the Alien platform: each request carries an `x-webhook-signature` header, and the server verifies it against your public key before processing (see `app/api/webhooks/payment/route.ts`).
+Copy the **webhook public key** shown on creation into your `WEBHOOK_PUBLIC_KEY` env var, fill in the recipient addresses, and you're ready to accept payments.
 
-Fill in the recipient addresses and you're ready to accept payments.
+The step-by-step registration guide, payload schema, versioning, and signature verification are documented in the [payments docs](https://docs.alien.org/react-sdk/payments#webhook-setup). This boilerplate implements that contract in `app/api/webhooks/payment/route.ts`.
 
 ## Payment Flow
 
@@ -70,13 +64,11 @@ Fill in the recipient addresses and you're ready to accept payments.
 | USDC | Solana | `NEXT_PUBLIC_RECIPIENT_ADDRESS` |
 | ALIEN | Alien | `NEXT_PUBLIC_ALIEN_RECIPIENT_ADDRESS` |
 
-You can specify any Solana wallet for USDC/SOL tokens. For ALIEN token payments, your provider address is used automatically.
+You can specify any Solana wallet for USDC/SOL tokens. For ALIEN token payments, your provider address is used automatically. See the [supported tokens reference](https://docs.alien.org/react-sdk/payments#supported-tokens).
 
 ### Test Payments
 
 The store includes a **Test** tab with pre-configured test products. Test transactions are marked with a `test` badge and don't involve real funds.
-
-Available test scenarios:
 
 | Test product | What it simulates |
 |---|---|
@@ -85,16 +77,7 @@ Available test scenarios:
 | Test cancelled | User cancels the payment |
 | Test failed | Payment succeeds on-chain but webhook reports failure |
 
-Some test scenarios simulate errors on both the **frontend** (payment UI) and **backend** (webhook processing), useful for testing your error handling:
-
-| Scenario | Description |
-|---|---|
-| `paid` | Successful payment |
-| `paid:failed` | Payment goes through but is marked as failed |
-| `cancelled` | User cancels before completing |
-| `error:insufficient_balance` | Insufficient balance |
-| `error:network_error` | Network error |
-| `error:unknown` | Unknown error |
+The full list of test scenarios (including error simulations) and their frontend/webhook behavior is documented in the [test mode docs](https://docs.alien.org/react-sdk/payments#test-mode).
 
 ## Project Structure
 
@@ -205,7 +188,7 @@ PostgreSQL with Drizzle ORM. Local setup uses Docker (`docker-compose.yml`).
 | `token` | TEXT | Token type |
 | `network` | TEXT | Network |
 | `invoice` | TEXT | Associated invoice |
-| `test` | TEXT | Originating test scenario (e.g. `paid`, `paid:failed`); `NULL` for real payments |
+| `test` | TEXT | `"true"` for test payments; `NULL` for real ones |
 | `payload` | JSONB | Full webhook payload for audit |
 
 **Commands:**
@@ -269,7 +252,7 @@ Returns the authenticated user's transaction history. Requires Bearer token.
 
 ### `POST /api/webhooks/payment`
 
-Receives payment status updates from the Alien platform. Verifies the `x-webhook-signature` header (Ed25519) against `WEBHOOK_PUBLIC_KEY`, cross-checks the payload against the stored payment intent (recipient, amount, token, network), and processes idempotently — re-delivered webhooks for settled intents respond with `{ "success": true, "processed": false }` without reprocessing.
+Receives payment status updates from the Alien platform, implementing the [webhook contract](https://docs.alien.org/react-sdk/payments#webhook-setup) (schema version 3): Ed25519 signature verification, version check, and payload cross-validation against the stored payment intent. Processes idempotently — re-delivered webhooks for settled intents respond with `{ "success": true, "processed": false }` without reprocessing.
 
 ## Deployment
 
