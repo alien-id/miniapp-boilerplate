@@ -1,12 +1,14 @@
-import { createAuthClient, type AuthClient } from "@alien_org/auth-client";
+import { createAuthClient, type AuthClient } from "@alien-id/miniapps-auth-client";
 import { getServerEnv } from "@/lib/env";
 
 let authClient: AuthClient | null = null;
 
 function getAuthClient(): AuthClient {
   if (!authClient) {
+    const env = getServerEnv();
     authClient = createAuthClient({
-      jwksUrl: getServerEnv().ALIEN_JWKS_URL,
+      audience: env.ALIEN_AUDIENCE,
+      jwksUrl: env.ALIEN_JWKS_URL,
     });
   }
   return authClient;
@@ -19,5 +21,7 @@ export function verifyToken(accessToken: string): Promise<TokenInfo> {
 }
 
 export function extractBearerToken(header: string | null): string | null {
-  return header?.startsWith("Bearer ") ? header.slice(7) : null;
+  // Auth schemes are case-insensitive per RFC 9110.
+  const match = header?.match(/^Bearer\s+(\S+)$/i);
+  return match?.[1] ?? null;
 }
