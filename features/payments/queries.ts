@@ -26,36 +26,6 @@ export async function findPaymentIntentByInvoice(
   });
 }
 
-export async function markPaymentIntentCompleted(invoice: string) {
-  await db
-    .update(schema.paymentIntents)
-    .set({ status: "completed" })
-    .where(eq(schema.paymentIntents.invoice, invoice));
-}
-
-export async function markPaymentIntentFailed(invoice: string) {
-  await db
-    .update(schema.paymentIntents)
-    .set({ status: "failed" })
-    .where(eq(schema.paymentIntents.invoice, invoice));
-}
-
-export async function createTransaction(data: {
-  senderAlienId: string | null;
-  recipientAddress: string;
-  txHash: string | null;
-  status: string;
-  amount: string | null;
-  token: string | null;
-  network: string | null;
-  invoice: string | null;
-  test: string | null;
-  payload: unknown;
-}): Promise<Transaction> {
-  const [tx] = await db.insert(schema.transactions).values(data).returning();
-  return tx;
-}
-
 export async function getTransactionsByAlienId(
   alienId: string,
   limit = 50,

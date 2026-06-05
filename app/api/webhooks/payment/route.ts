@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getServerEnv } from "@/lib/env";
 import { WebhookPayload } from "@/features/payments/dto";
+import { findPaymentIntentByInvoice } from "@/features/payments/queries";
 import { db, schema } from "@/lib/db";
 
 async function verifySignature(
@@ -23,6 +24,23 @@ async function verifySignature(
     Buffer.from(signatureHex, "hex"),
     Buffer.from(body),
   );
+}
+
+/**
+ * Returns the fields of the webhook payload that contradict the stored
+ * payment intent. A signed webhook should always match the intent it
+ * references — a mismatch means a misrouted or forged notification.
+ */
+function findIntentMismatches(
+  payload: WebhookPayload,
+  intent: { recipientAddress: string; amount: string; token: string; network: string },
+): string[] {
+  const mismatches: string[] = [];
+  if (payload.recipient !== intent.recipientAddress) mismatches.push("recipient");
+  if (payload.amount !== undefined && payload.amount !== intent.amount) mismatches.push("amount");
+  if (payload.token !== undefined && payload.token !== intent.token) mismatches.push("token");
+  if (payload.network !== undefined && payload.network !== intent.network) mismatches.push("network");
+  return mismatches;
 }
 
 export async function POST(request: Request) {
@@ -50,7 +68,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const parsed = WebhookPayload.safeParse(JSON.parse(rawBody));
+    let json: unknown;
+    try {
+      json = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    }
+
+    const parsed = WebhookPayload.safeParse(json);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -60,10 +85,7 @@ export async function POST(request: Request) {
     }
 
     const payload = parsed.data;
-
-    const intent = await db.query.paymentIntents.findFirst({
-      where: eq(schema.paymentIntents.invoice, payload.invoice),
-    });
+    const intent = await findPaymentIntentByInvoice(payload.invoice);
 
     if (!intent) {
       return NextResponse.json(
@@ -72,33 +94,63 @@ export async function POST(request: Request) {
       );
     }
 
-    if (intent.status === "completed" || intent.status === "failed") {
-      return NextResponse.json({ success: true });
+    // Never trust payload values blindly, even with a valid signature —
+    // the source of truth for what was sold is the stored intent.
+    const mismatches = findIntentMismatches(payload, intent);
+    if (mismatches.length > 0) {
+      console.error(
+        `Webhook for invoice ${payload.invoice} contradicts stored intent (${mismatches.join(", ")})`,
+      );
+      return NextResponse.json(
+        { error: "Payload does not match payment intent" },
+        { status: 400 },
+      );
     }
 
-    await db.transaction(async (tx) => {
-      const newStatus = payload.status === "finalized" ? "completed" : "failed";
-
-      await tx
+    // The status transition is conditional on `pending`, so concurrent
+    // re-deliveries of the same webhook race on this single UPDATE: exactly
+    // one wins and records the transaction, the rest are acknowledged below.
+    const processed = await db.transaction(async (tx) => {
+      const [settled] = await tx
         .update(schema.paymentIntents)
-        .set({ status: newStatus })
-        .where(eq(schema.paymentIntents.invoice, payload.invoice));
+        .set({ status: payload.status === "finalized" ? "completed" : "failed" })
+        .where(
+          and(
+            eq(schema.paymentIntents.invoice, payload.invoice),
+            eq(schema.paymentIntents.status, "pending"),
+          ),
+        )
+        .returning({ id: schema.paymentIntents.id });
+
+      if (!settled) return false;
 
       await tx.insert(schema.transactions).values({
         senderAlienId: intent.senderAlienId,
-        recipientAddress: payload.recipient,
+        recipientAddress: intent.recipientAddress,
         txHash: payload.txHash ?? null,
         status: payload.status === "finalized" ? "paid" : "failed",
         amount: intent.amount,
         token: intent.token,
         network: intent.network,
         invoice: payload.invoice,
-        test: payload.test ? "true" : null,
+        test: payload.test ?? null,
         payload,
       });
+      return true;
     });
 
-    return NextResponse.json({ success: true });
+    if (!processed) {
+      return NextResponse.json({
+        success: true,
+        processed: false,
+        reason: "already_processed",
+      });
+    }
+
+    // Fulfill the order here (credit diamonds, unlock content, ...) when
+    // payload.status === "finalized".
+
+    return NextResponse.json({ success: true, processed: true });
   } catch (error) {
     console.error("Webhook processing error:", error);
     return NextResponse.json(
