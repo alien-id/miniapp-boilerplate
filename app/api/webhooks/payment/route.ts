@@ -26,19 +26,27 @@ async function verifySignature(
   );
 }
 
+/** The webhook schema version this handler implements (X-Webhook-Version). */
+const SUPPORTED_WEBHOOK_VERSION = "3";
+
 /**
  * Returns the fields of the webhook payload that contradict the stored
  * payment intent. A signed webhook should always match the intent it
  * references — a mismatch means a misrouted or forged notification.
+ *
+ * `token` is deliberately not compared: the platform sends a normalized
+ * value (a mint address or "native"), which differs from the slug used
+ * when requesting the payment. Recipient, amount, and network
+ * unambiguously pin the payment to the intent.
+ * Spec: https://docs.alien.org/react-sdk/payments#webhook-payload
  */
 function findIntentMismatches(
   payload: WebhookPayload,
-  intent: { recipientAddress: string; amount: string; token: string; network: string },
+  intent: { recipientAddress: string; amount: string; network: string },
 ): string[] {
   const mismatches: string[] = [];
   if (payload.recipient !== intent.recipientAddress) mismatches.push("recipient");
   if (payload.amount !== undefined && payload.amount !== intent.amount) mismatches.push("amount");
-  if (payload.token !== undefined && payload.token !== intent.token) mismatches.push("token");
   if (payload.network !== undefined && payload.network !== intent.network) mismatches.push("network");
   return mismatches;
 }
@@ -51,6 +59,16 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Missing webhook signature" },
       { status: 401 },
+    );
+  }
+
+  // Reject schema versions we don't implement rather than misreading them.
+  const version = request.headers.get("x-webhook-version");
+  if (version !== null && version !== SUPPORTED_WEBHOOK_VERSION) {
+    console.error(`Unsupported webhook version: ${version}`);
+    return NextResponse.json(
+      { error: `Unsupported webhook version: ${version}` },
+      { status: 400 },
     );
   }
 
@@ -133,7 +151,7 @@ export async function POST(request: Request) {
         token: intent.token,
         network: intent.network,
         invoice: payload.invoice,
-        test: payload.test ?? null,
+        test: payload.test ? "true" : null,
         payload,
       });
       return true;

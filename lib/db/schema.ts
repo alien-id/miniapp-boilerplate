@@ -40,7 +40,7 @@ export const transactions = pgTable(
     token: text("token"),
     network: text("network"),
     invoice: text("invoice"),
-    /** Originating test scenario (e.g. "paid", "paid:failed") — null for real payments. */
+    /** "true" for test payments — null for real ones. */
     test: text("test"),
     /** Full webhook payload, kept verbatim for auditing. */
     payload: jsonb("payload"),

@@ -25,8 +25,10 @@ export const CreateInvoiceResponse = z.object({
 export type CreateInvoiceResponse = z.infer<typeof CreateInvoiceResponse>;
 
 /**
- * Payment webhook payload, Ed25519-signed by the Alien platform. For test
- * payments, `test` carries the originating test scenario string.
+ * Payment webhook payload (X-Webhook-Version: 3), Ed25519-signed by the
+ * Alien platform. `token` is platform-normalized (a mint address or
+ * "native"), not the slug used in payment:request.
+ * Spec: https://docs.alien.org/react-sdk/payments#webhook-payload
  */
 export const WebhookPayload = z.object({
   invoice: z.string(),
@@ -34,9 +36,10 @@ export const WebhookPayload = z.object({
   status: z.enum(["finalized", "failed"]),
   txHash: z.string().optional(),
   amount: z.string().optional(),
+  decimals: z.number().optional(),
   token: z.string().optional(),
   network: z.string().optional(),
-  test: z.enum(PAYMENT_TEST_SCENARIOS).optional(),
+  test: z.boolean().optional(),
 });
 
 export type WebhookPayload = z.infer<typeof WebhookPayload>;
